@@ -1,0 +1,24 @@
+groups:
+  - name: ids-ml-lab
+    rules:
+      - alert: IDSDetectorSilent
+        expr: time() - ids_detector_last_event_timestamp_seconds > 60
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Detector has not processed events for more than one minute"
+      - alert: IDSHighAnomalyRate
+        expr: rate(ids_detector_predictions_total{prediction="attack"}[2m]) / clamp_min(rate(ids_detector_predictions_total[2m]), 0.001) > 0.5
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "More than half of recent events are classified as attacks"
+      - alert: IDSRecallLow
+        expr: ids_evaluator_recall < 0.6
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Live recall is below 0.60"

@@ -1,0 +1,117 @@
+name: ids-ml-lab
+
+x-python-service: &python-service
+  build:
+    context: .
+  restart: unless-stopped
+  init: true
+  environment:
+    LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
+services:
+  lab-service:
+    <<: *python-service
+    command: ["ids-lab-service"]
+    expose:
+      - "5353/udp"
+      - "8080"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  generator:
+    <<: *python-service
+    command: ["ids-generate"]
+    environment:
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      GENERATOR_MODE: ${GENERATOR_MODE:-mixed}
+      GENERATOR_CONFIG: /app/config/generator.yaml
+      TRUTH_PATH: /runtime/truth/events.jsonl
+    ports:
+      - "127.0.0.1:9101:9101"
+    volumes:
+      - truth-data:/runtime/truth
+    depends_on:
+      lab-service:
+        condition: service_healthy
+
+  zeek:
+    image: zeek/zeek:8.2.2
+    restart: unless-stopped
+    init: true
+    network_mode: "service:generator"
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    command:
+      - zeek
+      - -C
+      - -i
+      - eth0
+      - /opt/ids/local.zeek
+    volumes:
+      - ./zeek/local.zeek:/opt/ids/local.zeek:ro
+      - zeek-data:/logs
+    working_dir: /logs
+    depends_on:
+      generator:
+        condition: service_started
+
+  detector:
+    <<: *python-service
+    command: ["ids-detector"]
+    environment:
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      MODEL_CONFIG: /app/config/model.yaml
+      ZEEK_LOG_DIR: /runtime/zeek
+      PREDICTIONS_PATH: /runtime/predictions/events.jsonl
+    ports:
+      - "127.0.0.1:9102:9102"
+    volumes:
+      - zeek-data:/runtime/zeek:ro
+      - prediction-data:/runtime/predictions
+    depends_on:
+      zeek:
+        condition: service_started
+
+  evaluator:
+    <<: *python-service
+    command: ["ids-evaluator"]
+    environment:
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      TRUTH_PATH: /runtime/truth/events.jsonl
+      PREDICTIONS_PATH: /runtime/predictions/events.jsonl
+    ports:
+      - "127.0.0.1:9103:9103"
+    volumes:
+      - truth-data:/runtime/truth:ro
+      - prediction-data:/runtime/predictions:ro
+    depends_on:
+      detector:
+        condition: service_started
+
+  prometheus:
+    image: prom/prometheus:v3.5.5
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    depends_on:
+      - generator
+      - detector
+      - evaluator
+
+volumes:
+  prometheus-data:
+  prediction-data:
+  truth-data:
+  zeek-data:

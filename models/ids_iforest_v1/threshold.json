@@ -1,0 +1,4 @@
+{
+  "threshold": 0.046585864543490896,
+  "selection": "maximum validation F1 with FPR <= 0.05"
+}

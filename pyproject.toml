@@ -1,0 +1,65 @@
+[project]
+name = "ids-ml-detection-lab"
+version = "0.1.0"
+description = "Production-like teaching lab for anomaly-based IDS/IPS with Zeek and Isolation Forest"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = { text = "MIT" }
+authors = [{ name = "IDS/IPS & ML course" }]
+dependencies = [
+  "dnslib>=0.9.26,<0.10",
+  "httpx>=0.28,<0.29",
+  "joblib>=1.4,<2",
+  "numpy>=2.0,<2.3",
+  "pandas>=2.2,<3",
+  "prometheus-client>=0.21,<1",
+  "pydantic>=2.10,<3",
+  "pyyaml>=6.0,<7",
+  "scikit-learn>=1.6,<2",
+]
+
+[project.scripts]
+ids-build-data = "dataset_builder.build_dataset:main"
+ids-train = "ids_ml_lab.training:main"
+ids-generate = "ids_ml_lab.generator:main"
+ids-detector = "ids_ml_lab.detector:main"
+ids-evaluator = "ids_ml_lab.evaluator:main"
+ids-lab-service = "ids_ml_lab.lab_service:main"
+
+[dependency-groups]
+analysis = [
+  "ipykernel>=6.29,<7",
+  "jupyterlab>=4.3,<5",
+  "llvmlite>=0.44,<0.46",
+  "matplotlib>=3.9,<4",
+  "numba>=0.61,<0.63",
+  "pyarrow>=17,<24",
+  "scipy>=1.14,<2",
+  "seaborn>=0.13,<1",
+  "shap>=0.47,<1",
+]
+dev = [
+  "nbclient>=0.10,<1",
+  "pytest>=8.3,<10",
+  "pytest-cov>=6,<8",
+  "ruff>=0.9,<1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ids_ml_lab", "dataset_builder"]
+
+[tool.pytest.ini_options]
+addopts = "-q --disable-warnings --maxfail=1"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]

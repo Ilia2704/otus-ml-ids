@@ -1,0 +1,50 @@
+{
+  "features": [
+    "protocol_type",
+    "service",
+    "flag",
+    "duration",
+    "src_bytes",
+    "dst_bytes",
+    "count",
+    "srv_count",
+    "serror_rate",
+    "srv_serror_rate",
+    "rerror_rate",
+    "same_srv_rate",
+    "diff_srv_rate",
+    "dst_host_count",
+    "dst_host_srv_count",
+    "dst_host_same_srv_rate"
+  ],
+  "files": {
+    "test.parquet": {
+      "attack": 2400,
+      "normal": 2400,
+      "rows": 4800,
+      "sha256": "51c0987c34e4a32b9f827f3b581d9f69cefcc4976bd9d81c7250e0fe57c1ca2e"
+    },
+    "train.parquet": {
+      "attack": 7200,
+      "normal": 7200,
+      "rows": 14400,
+      "sha256": "dca68de553a37cd40913ecb2a0f8deb765fbf21b44e3d8180bc8a62c66d30415"
+    },
+    "validation.parquet": {
+      "attack": 2400,
+      "normal": 2400,
+      "rows": 4800,
+      "sha256": "b9b610df3ade68697bc8e3e0516caa129b35f83c2eda5fce30d7c67cb1c587aa"
+    }
+  },
+  "generated_at_utc": "2026-09-28T01:36:21.162498+00:00",
+  "license": "CC BY 4.0",
+  "seed": 42,
+  "selection": "deduplicated, balanced binary sample; 60/20/20 stratified split",
+  "source": "UCI KDD Cup 1999, 10% subset",
+  "source_doi": "10.24432/C51C7N",
+  "source_mirror": "https://ndownloader.figshare.com/files/5976042",
+  "source_sha256": "8045aca0d84e70e622d1148d7df782496f6333bf6eb979a1b0837c42a9fd9561",
+  "source_url": "https://archive.ics.uci.edu/dataset/130/kdd+cup+1999+data",
+  "target": "label (0=normal, 1=attack)"
+}

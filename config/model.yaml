@@ -1,0 +1,8 @@
+artifact_dir: models/ids_iforest_v1
+threshold_file: threshold.json
+model_file: model.joblib
+zeek_log_dir: runtime/zeek
+predictions_path: runtime/predictions/events.jsonl
+poll_interval_seconds: 0.25
+metrics_port: 9102
+window_seconds: 2.0
