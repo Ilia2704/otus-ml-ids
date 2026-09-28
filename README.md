@@ -18,49 +18,56 @@
 
 ## Архитектура
 
-┌────────────────────────── shared network namespace ──────────────────────────┐
-│                                                                              │
-│  ┌─────────────┐       traffic is passively observed       ┌──────────────┐  │
-│  │  generator  │ · · · · · · · · · · · · · · · ·· · · · · ►│     Zeek     │  │
-│  └──────┬──────┘                                           └──────┬───────┘  │
-│         │                                                         │          │
-└─────────┼─────────────────────────────────────────────────────────┼──────────┘
-          │                                                         │
-          │ synthetic DNS / HTTP traffic                            │ JSON logs
-          ▼                                                         ▼
-┌────────────────┐                                         ┌────────────────┐
-│  lab-service   │                                         │   zeek-data    │
-│ DNS :5353      │                                         │ dns.log        │
-│ HTTP :8080     │                                         │ http.log       │
-└────────────────┘                                         └───────┬────────┘
-                                                                   │
-                                                                   ▼
-┌────────────────┐    pipeline + threshold                 ┌────────────────┐
-│ model artifact ├────────────────────────────────────────►│    detector    │
-└────────────────┘                                         └───────┬────────┘
-                                                                   │
-                                                                   │ predictions JSONL
-                                                                   ▼
-                                                          ┌──────────────────┐
-          ┌──────────────────── truth JSONL ─────────────►│    evaluator     │
-          │                                               └──────────────────┘
-          │
-┌─────────┴───┐
-│  generator  │
-└─────────────┘
+```mermaid
+flowchart TB
+    Artifact["Model artifact<br/>Pipeline · Feature schema · Threshold"]
 
+    subgraph Live["Live IDS-контур"]
+        direction TB
 
-                         monitoring plane
+        subgraph Network["Shared network namespace"]
+            direction LR
+            Generator["Traffic generator<br/>normal / mixed"]
+            Zeek["Zeek<br/>пассивный сетевой сенсор"]
 
-                         ┌────────────────┐
-                         │   Prometheus   │
-                         └───┬─────┬──────┘
-                             │     │
-             scrape :9101 ───┘     ├──── scrape :9102 ───► detector
-                 generator          │
-                                    └──── scrape :9103 ───► evaluator
+            Generator -. "наблюдение за трафиком" .-> Zeek
+        end
 
-`event_id` встраивается в DNS query или HTTP URI. Поэтому evaluator сопоставляет Zeek-derived prediction с ground truth без приблизительного timestamp join.
+        Lab["Lab service<br/>DNS :5353 · HTTP :8080"]
+        Logs[("zeek-data<br/>dns.log · http.log")]
+        Truth[("truth-data<br/>Ground truth JSONL")]
+        Detector["ML detector"]
+        Predictions[("prediction-data<br/>Predictions JSONL")]
+        Evaluator["Live evaluator<br/>TP · FP · FN · TN"]
+
+        Generator -->|"Синтетический DNS/HTTP-трафик"| Lab
+        Generator -->|"event_id · label · attack_type"| Truth
+
+        Zeek -->|"JSON logs"| Logs
+        Logs --> Detector
+
+        Artifact -->|"Pipeline и threshold"| Detector
+        Detector -->|"Anomaly score и prediction"| Predictions
+
+        Truth --> Evaluator
+        Predictions --> Evaluator
+    end
+
+    subgraph Monitoring["Monitoring plane"]
+        direction LR
+
+        Prometheus["Prometheus<br/>Metrics · PromQL · Alerts"]
+
+        Prometheus -. "scrape :9101" .-> Generator
+        Prometheus -. "scrape :9102" .-> Detector
+        Prometheus -. "scrape :9103" .-> Evaluator
+    end
+```
+
+`event_id` встраивается в DNS query или HTTP URI. Благодаря этому evaluator
+сопоставляет prediction, сформированный по журналам Zeek, с ground truth без
+приблизительного объединения по времени.
+
 
 ## Требования
 
