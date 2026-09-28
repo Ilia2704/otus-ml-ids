@@ -18,27 +18,47 @@
 
 ## Архитектура
 
-```text
-                       ┌──────────────┐
-                       │ lab-service  │  DNS :5353 / HTTP :8080
-                       └──────▲───────┘
-                              │ synthetic traffic
-┌─────────────┐  truth JSONL  │      shared network namespace
-│  generator  ├───────────────┼────────────────────┐
-└──────┬──────┘               │                    │
-       │ metrics              │              ┌─────▼─────┐ JSON logs
-       │                      └──────────────►│   Zeek    ├─────────┐
-       │                                     └───────────┘         │
-       │                                                           ▼
-       │                                                   ┌────────────┐
-       │                                                   │  detector  │
-       │                                                   └─────┬──────┘
-       │                                                         │ predictions
-       │                    ┌─────────────┐                      ▼
-       └───────────────────►│ Prometheus  │◄─────────────┌────────────┐
-                            └─────────────┘               │ evaluator  │◄── truth
-                                                         └────────────┘
-```
+┌────────────────────────── shared network namespace ──────────────────────────┐
+│                                                                              │
+│  ┌─────────────┐       traffic is passively observed       ┌──────────────┐  │
+│  │  generator  │ · · · · · · · · · · · · · · · ·· · · · · ►│     Zeek     │  │
+│  └──────┬──────┘                                           └──────┬───────┘  │
+│         │                                                         │          │
+└─────────┼─────────────────────────────────────────────────────────┼──────────┘
+          │                                                         │
+          │ synthetic DNS / HTTP traffic                            │ JSON logs
+          ▼                                                         ▼
+┌────────────────┐                                         ┌────────────────┐
+│  lab-service   │                                         │   zeek-data    │
+│ DNS :5353      │                                         │ dns.log        │
+│ HTTP :8080     │                                         │ http.log       │
+└────────────────┘                                         └───────┬────────┘
+                                                                   │
+                                                                   ▼
+┌────────────────┐    pipeline + threshold                 ┌────────────────┐
+│ model artifact ├────────────────────────────────────────►│    detector    │
+└────────────────┘                                         └───────┬────────┘
+                                                                   │
+                                                                   │ predictions JSONL
+                                                                   ▼
+                                                          ┌──────────────────┐
+          ┌──────────────────── truth JSONL ─────────────►│    evaluator     │
+          │                                               └──────────────────┘
+          │
+┌─────────┴───┐
+│  generator  │
+└─────────────┘
+
+
+                         monitoring plane
+
+                         ┌────────────────┐
+                         │   Prometheus   │
+                         └───┬─────┬──────┘
+                             │     │
+             scrape :9101 ───┘     ├──── scrape :9102 ───► detector
+                 generator          │
+                                    └──── scrape :9103 ───► evaluator
 
 `event_id` встраивается в DNS query или HTTP URI. Поэтому evaluator сопоставляет Zeek-derived prediction с ground truth без приблизительного timestamp join.
 
