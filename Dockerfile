@@ -12,15 +12,15 @@ WORKDIR /app
 COPY pyproject.toml uv.lock README.md ./
 COPY dataset_builder ./dataset_builder
 COPY src ./src
-RUN uv sync --frozen --no-dev --no-install-project
+RUN uv sync --frozen --no-dev --no-group analysis --no-install-project
 
 COPY config ./config
 COPY models ./models
-RUN uv sync --frozen --no-dev
+RUN uv sync --frozen --no-dev --no-group analysis
 
 RUN useradd --create-home --uid 10001 appuser \
     && mkdir -p /runtime/zeek /runtime/truth /runtime/predictions \
     && chown -R appuser:appuser /app /runtime
 
 USER appuser
-ENTRYPOINT ["uv", "run", "--frozen", "--no-dev"]
+ENTRYPOINT ["uv", "run", "--frozen", "--no-dev", "--no-group", "analysis"]

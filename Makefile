@@ -10,7 +10,8 @@ train:
 	uv run ids-train
 
 notebook:
-	uv run jupyter lab notebooks/01_train_validate_explain.ipynb
+	uv run python scripts/setup_notebook_kernel.py
+	code notebooks/01_train_validate_explain.ipynb notebooks/02_isolation_forest.ipynb
 
 test:
 	uv run pytest

@@ -1,0 +1,31 @@
+{
+  "created_at_utc": "2026-10-05T15:05:13.205650+00:00",
+  "python": "3.12.7",
+  "versions": {
+    "numpy": "2.2.6",
+    "pandas": "2.3.3",
+    "scikit-learn": "1.9.1",
+    "catboost": "1.2.10",
+    "shap": "0.52.0",
+    "scipy": "1.18.1",
+    "joblib": "1.6.0",
+    "ipykernel": "6.31.0",
+    "jupyterlab": "4.6.4",
+    "nbclient": "0.11.0"
+  },
+  "seed": 42,
+  "data_audit": {
+    "source_rows": 494021,
+    "unique_feature_rows": 145583,
+    "conflicting_label_rows": 2,
+    "redundant_rows_removed": 348436,
+    "source_sha256": "8045aca0d84e70e622d1148d7df782496f6333bf6eb979a1b0837c42a9fd9561",
+    "seed": 42
+  },
+  "split": "60/20/20 stratified unique feature vectors",
+  "training": "normal train only",
+  "correlation_threshold": 0.9,
+  "threshold_selection": "maximum validation F1 with FPR <= 0.05",
+  "fit_seconds": 0.7559798749862239,
+  "live_compatible": false
+}

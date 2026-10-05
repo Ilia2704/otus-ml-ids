@@ -8,7 +8,9 @@
 
 - `data/source/` — исходный публичный KDD Cup 1999 10% с проверяемой SHA-256 и описанием происхождения;
 - `data/prepared/` — готовые `train.parquet`, `validation.parquet`, `test.parquet` и manifest;
-- `notebooks/01_train_validate_explain.ipynb` — preprocessing, Isolation Forest, ROC/PR, CV, bootstrap CI, KS, полные метрики, confusion matrix, threshold selection и SHAP;
+- `notebooks/01_train_validate_explain.ipynb` — полный supervised demo: Logistic Regression и CatBoost;
+- `notebooks/02_isolation_forest.ipynb` — полный anomaly demo: Isolation Forest, обучение только на normal;
+- оба notebook используют весь локальный KDD source, feature engineering, корреляционный отбор, CV, bootstrap CI, метрики, SHAP и joblib;
 - `models/ids_iforest_v1/` — готовый artifact: pipeline, threshold, schema, metadata, validation report;
 - `src/ids_ml_lab/` — generator, online feature adapter, detector, evaluator и внутренние DNS/HTTP-сервисы;
 - `zeek/` — live capture с JSON-логами;
@@ -81,7 +83,8 @@ flowchart TB
 ```bash
 uv sync --frozen --all-groups
 uv run pytest
-uv run jupyter lab notebooks/01_train_validate_explain.ipynb
+uv run python scripts/setup_notebook_kernel.py
+source .venv/bin/activate
 ```
 
 Готовые Parquet splits и model artifact уже включены. Чтобы проверить полную воспроизводимость с локального публичного source-файла:
@@ -92,7 +95,7 @@ uv run ids-train
 uv run pytest
 ```
 
-`ids-train` является каноническим путём изготовления модели и всегда создаёт согласованный полный artifact: pipeline, feature schema, threshold, metadata, validation report и SHAP importance. Notebook использует тот же training path при финальном экспорте.
+`ids-train` является каноническим путём изготовления модели и всегда создаёт согласованный полный artifact: pipeline, feature schema, threshold, metadata, validation report и SHAP importance. Два notebook экспортируют отдельные полные KDD-модели в `models/demo_logreg`, `models/demo_catboost`, `models/demo_iforest`; они не заменяют live artifact с 16 признаками.
 
 Builder сначала проверяет SHA-256 источника, затем делает deterministic deduplication, balanced sample и stratified split 60/20/20 с seed `42`. Обучение использует только normal-строки training split. Validation labels нужны для выбора threshold, test используется один раз для финальной оценки.
 
@@ -170,20 +173,55 @@ GENERATOR_MODE=normal docker compose up --build
 
 ## Notebook и методика оценки
 
-Notebook показывает полный путь:
+Оба notebook используют одинаковый Python из проектной `.venv`. Группы `analysis` и `dev`
+включены по умолчанию для `uv run`, поэтому CLI не теряет notebook-зависимости.
+После `uv sync --frozen --all-groups` выполните `uv run python scripts/setup_notebook_kernel.py`.
+Откройте `.ipynb` прямо в **VS Code** (расширения Python и Jupyter).
+В **Select Kernel → Python Environments** выберите проектный `.venv/bin/python`; первая ячейка проверяет prefix,
+путь интерпретатора CLI и зарегистрированного kernel, Python 3.12 и версии пакетов.
+Нажмите **Run All**. Если окружение не видно, используйте **Enter interpreter path** и укажите
+абсолютный путь к `.venv/bin/python` этого проекта. Kernel хранится внутри `.venv`; после перемещения
+проекта повторно зарегистрируйте его. Отдельный запуск JupyterLab не требуется.
 
-1. загрузка фиксированных train/validation/test splits и проверка schema;
-2. `OneHotEncoder(handle_unknown="ignore")` для категорий и `RobustScaler` для чисел;
-3. обучение Isolation Forest только на normal training data;
-4. ROC AUC и PR AUC на непрерывном anomaly score;
-5. 5-fold stratified CV с повторным fit только на normal-части каждого fold;
-6. bootstrap 95% CI для ROC AUC и PR AUC;
-7. two-sample KS между normal и attack scores;
-8. threshold на validation: максимум F1 при FPR ≤ 5%;
-9. accuracy, balanced accuracy, precision, recall, F1, specificity, FPR, MCC и confusion matrix на test;
-10. SHAP TreeExplainer для интерпретации Isolation Forest и экспорт global feature importance.
+Общая последовательность:
 
-ROC/PR и метрики считаются по anomaly score, а confusion matrix — только после фиксации threshold на validation. Test не участвует в выборе threshold.
+1. Проверка среды, загрузка всех локальных файлов данных и checksum.
+2. Словарь 41 KDD-признака, примеры строк, качество данных и баланс классов.
+3. Удаление повторных feature vectors и исключение векторов с противоречивым binary label.
+4. Стратифицированный split 60/20/20 с seed 42, без balanced subsampling.
+5. Stateless feature engineering: byte shares, объём/интенсивность, нулевой трафик, log1p.
+6. Train-only удаление констант, дубликатов и Spearman-correlated признаков при |ρ| ≥ 0.90.
+7. Supervised notebook: LR с scaling/OHE и CatBoost с native categories; anomaly notebook:
+   Isolation Forest, включая preprocessing/selection, fit только на normal train.
+8. 5-fold CV на train с повторным fit всего pipeline в каждом fold.
+9. Максимум validation F1 при FPR ≤ 5%; test не участвует в выборе решений.
+10. Итоговые ROC AUC, AP, Gini, accuracy, balanced accuracy, precision, recall, F1,
+    specificity, FPR/FNR, MCC, KS, confusion matrix; log loss/Brier для supervised моделей.
+11. 300 paired-bootstrap повторов для 95% CI при фиксированных модели и пороге.
+12. Срезы по типам атак, протоколам/сервисам и примеры ошибок.
+13. Global/local SHAP с проверкой аддитивности: log odds для LR/CatBoost, длина пути для леса.
+14. Joblib bundle обученного pipeline и threshold, metadata, отчёт, CV/CI, SHAP, selection report;
+    загрузка обратно и проверка одинаковых scores/predictions.
+
+Полный запуск с чистых ядер и сохранением результатов в notebook:
+
+```bash
+uv run python scripts/execute_notebooks.py
+```
+
+При успешном запуске обновляются только два основных notebook. При ошибке диагностическая копия
+сохраняется в скрытом каталоге `.notebook-diagnostics/`.
+CLI inference из того же окружения:
+
+```bash
+uv run python scripts/predict_demo.py --model models/demo_logreg/model.joblib --split test
+uv run python scripts/predict_demo.py --model models/demo_catboost/model.joblib --split test
+uv run python scripts/predict_demo.py --model models/demo_iforest/model.joblib --split test
+```
+
+Demo bundles требуют 41 исходный KDD-признак. Их feature contract отличается от live Zeek:
+для запуска стенда продолжайте использовать `ids-train` и `models/ids_iforest_v1`.
+Bootstrap условен на обученную модель; случайный split KDD не является временной OOT-проверкой.
 
 ## Offline/online feature contract
 

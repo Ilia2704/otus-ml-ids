@@ -10,3 +10,5 @@ runtime/truth/*
 runtime/predictions/*
 !runtime/**/.gitkeep
 notebooks/executed/
+
+.notebook-diagnostics/

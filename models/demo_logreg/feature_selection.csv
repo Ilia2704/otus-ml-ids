@@ -1,0 +1,17 @@
+removed,retained,correlation,reason
+num_outbound_cmds,,,constant
+is_host_login,,,constant
+srv_serror_rate,serror_rate,0.98882566991512,Spearman
+srv_rerror_rate,rerror_rate,0.9708857688983187,Spearman
+diff_srv_rate,same_srv_rate,-0.9312900216103939,Spearman
+dst_host_same_srv_rate,dst_host_srv_count,0.9510941492249316,Spearman
+dst_host_serror_rate,serror_rate,0.958177952554971,Spearman
+dst_host_srv_serror_rate,serror_rate,0.9488715658414213,Spearman
+dst_host_srv_rerror_rate,dst_host_rerror_rate,0.9211488057881769,Spearman
+total_bytes,dst_bytes,0.9202086604062842,Spearman
+bytes_per_second,dst_bytes,0.9157460873798355,Spearman
+log_duration,duration,1.0,Spearman
+log_src_bytes,src_bytes,1.0,Spearman
+log_dst_bytes,dst_bytes,1.0,Spearman
+log_total_bytes,dst_bytes,0.9202086604062842,Spearman
+log_bytes_per_second,dst_bytes,0.9157460873798355,Spearman
