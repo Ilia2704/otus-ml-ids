@@ -1,0 +1,23 @@
+generator_seed: 42
+demo_profile: false
+generator:
+  events: 12000
+  duration_seconds: 480
+  attack_rate: 0.001
+feature_window_seconds: 60
+isolation_forest_random_state: 42
+top_anomalies: 5
+ollama_base_url: http://localhost:11434
+ollama_model: hf.co/Qwen/Qwen3-0.6B-GGUF:Q8_0
+llm_context_tokens: 4096
+llm_temperature: 0.0
+llm_timeout_seconds: 240
+suricata_image: jasonish/suricata:8.0.0
+max_benign_match_rate: 0.001
+min_detection_rate: 0.9
+demo:
+  generator:
+    events: 6000
+    duration_seconds: 40
+    attack_rate: 0.01
+  feature_window_seconds: 5

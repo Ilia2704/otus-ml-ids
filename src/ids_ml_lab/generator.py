@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import argparse
+import json
 import logging
 import os
 import random
 import secrets
+import socket
 import time
 import uuid
 from pathlib import Path
@@ -152,13 +155,133 @@ class TrafficGenerator:
             self.emit(attack=attack)
             time.sleep(max(0.0, interval - (time.monotonic() - started)))
 
+    def lecture_plan(self, scenario: str, settings: dict) -> list[dict]:
+        """Seeded request schedule; truth stays in the execution sidecar only."""
+        rng = random.Random(self.config.seed)
+        count = int(settings["events"])
+        duration = float(settings["duration_seconds"])
+        rate = float(settings["attack_rate"])
+        suspicious_count = round(count * rate)
+        if scenario == "A":
+            suspicious = set(rng.sample(range(count), suspicious_count))
+        elif scenario == "B":
+            # One concentrated episode, rather than independent random anomalies.
+            start = count * 3 // 4
+            suspicious = set(range(start, min(count, start + suspicious_count)))
+        elif scenario == "baseline":
+            suspicious = set()
+        else:
+            raise ValueError("scenario must be A, B or baseline")
+        plans = []
+        profiles = ["office", "developer", "backend", "service"]
+        domains = ["www.office.test", "api.dev.test", "db.backend.test", "health.service.test"]
+        for index in range(count):
+            is_suspicious = index in suspicious
+            client = 1 if scenario == "B" and is_suspicious else rng.choices(range(4), weights=[4, 3, 2, 1])[0]
+            event_id = f"{rng.getrandbits(128):032x}"
+            protocol = "dns" if is_suspicious or rng.random() < 0.9 else "http"
+            domain = domains[client] if rng.random() < 0.8 else "updates.shared.test"
+            if is_suspicious and scenario == "A":
+                domain = "telemetry-update.bad-example.test"
+            elif is_suspicious and scenario == "B":
+                token = "".join(rng.choices("abcdefghijklmnopqrstuvwxyz0123456789", k=48))
+                # No single anomaly-only suffix: same services as baseline.
+                domain = f"{token}.{domains[client]}"
+            elif rng.random() < 0.02:
+                domain = f"missing.{domain}"
+            # Labels and this identifier are never used as model inputs.
+            query = f"evt-{event_id}.{domain}"
+            path = rng.choice(["/", "/health", "/api/catalog", "/static/app.js", "/login"])
+            # Four activity sessions with idle intervals and small intra-session jitter.
+            progress = (index + 0.25 * rng.random()) / count * 4
+            session = int(progress)
+            offset = duration / 4 * (session + 0.8 * (progress - session))
+            plans.append({
+                "event_id": event_id, "client": client, "persona": profiles[client],
+                "protocol": protocol, "query": query, "uri": f"{path}/event/evt-{event_id}",
+                "offset": offset,
+                "label": int(is_suspicious), "scenario": scenario,
+            })
+        # Compress the suspicious episode into a short burst; background remains session-like.
+        if scenario == "B" and suspicious:
+            first = min(suspicious)
+            anchor = plans[first]["offset"]
+            for number, index in enumerate(sorted(suspicious)):
+                plans[index]["offset"] = anchor + number * 0.003
+        return sorted(plans, key=lambda event: event["offset"])
+
+    def run_lecture(self, scenario: str, settings: dict, run_dir: Path) -> None:
+        """Send actual requests with persistent UDP client sessions, not fabricated telemetry."""
+        plans = self.lecture_plan(scenario, settings)
+        sockets = []
+        run_dir.mkdir(parents=True, exist_ok=True)
+        started = time.time()
+        monotonic_start = time.monotonic()
+        try:
+            for client in range(4):
+                sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                sock.bind(("0.0.0.0", 20000 + client))
+                sock.settimeout(self.config.request_timeout_seconds)
+                sockets.append(sock)
+            for event in plans:
+                time.sleep(max(0, monotonic_start + event["offset"] - time.monotonic()))
+                sent_at = time.time()
+                delivered = False
+                try:
+                    if event["protocol"] == "dns":
+                        sock = sockets[event["client"]]
+                        question = DNSRecord.question(event["query"])
+                        question.header.id = int(event["event_id"][:4], 16)
+                        sock.sendto(question.pack(), (self.config.dns_host, self.config.dns_port))
+                        response = DNSRecord.parse(sock.recvfrom(4096)[0])
+                        delivered = response.header.id == question.header.id
+                    else:
+                        delivered = self.http.get(self.config.http_base_url + event["uri"]).is_success
+                except (OSError, DNSError, httpx.HTTPError):
+                    LOG.exception("Lecture request failed")
+                append_jsonl(run_dir / "ground_truth.jsonl", {
+                    "event_id": event["event_id"], "ts": sent_at,
+                    "label": event["label"], "scenario": scenario,
+                    "service": event["protocol"], "delivered": delivered,
+                })
+            time.sleep(max(0, monotonic_start + settings["duration_seconds"] - time.monotonic()))
+            ended = time.time()
+            (run_dir / "generation.json").write_text(json.dumps({
+                "scenario": scenario, "seed": self.config.seed, "started": started,
+                "ended": ended, "events": len(plans),
+                "suspicious_fraction": sum(e["label"] for e in plans) / len(plans),
+                "personas": ["office", "developer", "backend", "service"],
+                "client_entity": "source IP and persistent UDP source port",
+            }, indent=2), encoding="utf-8")
+            LOG.info("[generator] %s: %d requests, suspicious %.3f%%", scenario,
+                     len(plans), 100 * sum(e["label"] for e in plans) / len(plans))
+        finally:
+            for sock in sockets:
+                sock.close()
+
 
 def main() -> None:
     logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
     root = Path.cwd()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--lecture-config", type=Path)
+    parser.add_argument("--scenario", choices=["A", "B", "baseline"])
+    parser.add_argument("--run-dir", type=Path)
+    args = parser.parse_args()
     config_path = Path(os.getenv("GENERATOR_CONFIG", root / "config/generator.yaml"))
     truth_path = Path(os.getenv("TRUTH_PATH", root / "runtime/truth/events.jsonl"))
     config = load_config(config_path)
+    if args.lecture_config:
+        if not args.scenario or not args.run_dir:
+            parser.error("--scenario and --run-dir are required for the lecture")
+        settings = yaml.safe_load(args.lecture_config.read_text(encoding="utf-8"))
+        config.seed = settings["generator_seed"]
+        generator = TrafficGenerator(config, truth_path)
+        try:
+            generator.run_lecture(args.scenario, settings["generator"], args.run_dir)
+        finally:
+            generator.http.close()
+        return
     start_http_server(config.metrics_port)
     TrafficGenerator(config, truth_path).run()
 

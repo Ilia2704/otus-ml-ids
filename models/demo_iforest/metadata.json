@@ -1,5 +1,5 @@
 {
-  "created_at_utc": "2026-10-05T15:05:13.205650+00:00",
+  "created_at_utc": "2026-10-06T16:46:09.217576+00:00",
   "python": "3.12.7",
   "versions": {
     "numpy": "2.2.6",
@@ -26,6 +26,6 @@
   "training": "normal train only",
   "correlation_threshold": 0.9,
   "threshold_selection": "maximum validation F1 with FPR <= 0.05",
-  "fit_seconds": 0.7559798749862239,
+  "fit_seconds": 0.7396546660020249,
   "live_compatible": false
 }

@@ -12,3 +12,4 @@ runtime/predictions/*
 notebooks/executed/
 
 .notebook-diagnostics/
+artifacts/rule_generation/

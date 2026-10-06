@@ -6,13 +6,15 @@ smoke_project="ids-ml-lab-smoke-$$"
 deadline_seconds="${SMOKE_TIMEOUT_SECONDS:-120}"
 
 cd "$repo_root"
+export COMPOSE_PROFILES=live
 
 cleanup() {
   docker compose -p "$smoke_project" down -v --remove-orphans >/dev/null 2>&1 || true
 }
 trap cleanup EXIT INT TERM
 
-docker compose -p "$smoke_project" up --build -d
+docker compose -p "$smoke_project" build generator
+docker compose -p "$smoke_project" up --no-build -d
 
 deadline=$((SECONDS + deadline_seconds))
 while ((SECONDS < deadline)); do

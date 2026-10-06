@@ -411,4 +411,5 @@ def export_bundle(path, pipeline, kind, threshold, report, metadata, importance,
     after = model_scores(loaded["pipeline"], probe, kind)
     np.testing.assert_allclose(before, after, rtol=0, atol=1e-12)
     np.testing.assert_array_equal(before >= threshold, after >= loaded["threshold"])
+    probe[RAW_FEATURES].to_csv(path / "inference_sample.csv", index=False)
     return path / "model.joblib"

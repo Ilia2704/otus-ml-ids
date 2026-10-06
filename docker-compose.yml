@@ -1,6 +1,7 @@
 name: ids-ml-lab
 
 x-python-service: &python-service
+  image: ids-ml-lab-generator:latest
   build:
     context: .
   restart: unless-stopped
@@ -61,6 +62,7 @@ services:
 
   detector:
     <<: *python-service
+    profiles: [live]
     command: ["ids-detector"]
     environment:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
@@ -78,6 +80,7 @@ services:
 
   evaluator:
     <<: *python-service
+    profiles: [live]
     command: ["ids-evaluator"]
     environment:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
@@ -93,6 +96,7 @@ services:
         condition: service_started
 
   prometheus:
+    profiles: [live]
     image: prom/prometheus:v3.5.5
     restart: unless-stopped
     command:

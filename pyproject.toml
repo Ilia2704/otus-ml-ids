@@ -25,6 +25,8 @@ ids-generate = "ids_ml_lab.generator:main"
 ids-detector = "ids_ml_lab.detector:main"
 ids-evaluator = "ids_ml_lab.evaluator:main"
 ids-lab-service = "ids_ml_lab.lab_service:main"
+ids-rules = "ids_ml_lab.rule_generation:main"
+ids-infer = "ids_ml_lab.inference:main"
 
 [dependency-groups]
 analysis = [
@@ -57,6 +59,7 @@ packages = ["src/ids_ml_lab", "dataset_builder"]
 [tool.pytest.ini_options]
 addopts = "-q --disable-warnings --maxfail=1"
 testpaths = ["tests"]
+markers = ["integration: optional local Ollama or Docker/Suricata integration"]
 
 [tool.ruff]
 line-length = 100

@@ -7,7 +7,7 @@ import socketserver
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from dnslib import QTYPE, RR, A, DNSHeader, DNSRecord
+from dnslib import QTYPE, RCODE, RR, A, DNSHeader, DNSRecord
 
 LOG = logging.getLogger(__name__)
 
@@ -17,7 +17,15 @@ class DNSHandler(socketserver.BaseRequestHandler):
         data, sock = self.request
         request = DNSRecord.parse(data)
         reply = DNSRecord(DNSHeader(id=request.header.id, qr=1, aa=1, ra=1), q=request.q)
-        reply.add_answer(RR(request.q.qname, QTYPE.A, rdata=A("127.0.0.1"), ttl=30))
+        labels = str(request.q.qname).rstrip(".").split(".")
+        if labels[0].startswith("evt-"):
+            labels = labels[1:]
+        # Synthetic .test responses only; legacy .internal traffic stays unchanged.
+        missing = labels[-1] == "test" and (labels[0] == "missing" or len(labels[0]) >= 48)
+        if missing:
+            reply.header.rcode = RCODE.NXDOMAIN
+        else:
+            reply.add_answer(RR(request.q.qname, QTYPE.A, rdata=A("127.0.0.1"), ttl=30))
         sock.sendto(reply.pack(), self.client_address)
 
 

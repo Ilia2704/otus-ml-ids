@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import re
 from collections import Counter, deque
 from dataclasses import dataclass, field
@@ -84,3 +85,56 @@ __all__ = [
     "LiveFeatureExtractor",
     "extract_event_id",
 ]
+
+DNS_WINDOW_FEATURES = [
+    "dns_requests", "unique_qnames", "unique_base_domains", "unique_subdomains",
+    "avg_qname_length", "max_qname_length", "nxdomain_ratio", "avg_label_entropy",
+    "peak_requests_per_second",
+]
+
+
+def clean_qname(query: str) -> str:
+    """Remove the instrumentation prefix before calculating DNS statistics."""
+    return re.sub(r"^evt-[0-9a-f]{32}\.", "", query.lower().rstrip("."))
+
+
+def label_entropy(label: str) -> float:
+    if not label:
+        return 0.0
+    return -sum((n / len(label)) * math.log2(n / len(label)) for n in Counter(label).values())
+
+
+def dns_windows(records: list[dict], window_seconds: float = 60, origin: float = 0):
+    """Lecture-only DNS features. Client sessions are src IP + persistent UDP port.
+
+    Last two labels approximate base domains for synthetic .test names only.
+    Empty windows are omitted; identity and window_start are not ML inputs.
+    """
+    import pandas as pd
+
+    if window_seconds <= 0:
+        raise ValueError("window_seconds must be positive")
+    groups: dict[tuple, list] = {}
+    for record in records:
+        if not record.get("query") or record.get("qtype_name", "A") != "A":
+            continue
+        ts = float(record["ts"])
+        window = origin + math.floor((ts - origin) / window_seconds) * window_seconds
+        client = f"{record.get('id.orig_h', '')}:{record.get('id.orig_p', '')}"
+        groups.setdefault((window, client), []).append(record)
+    rows = []
+    for (window, client), events in sorted(groups.items()):
+        names = [clean_qname(str(e["query"])) for e in events]
+        labels = [n.split(".")[0] for n in names]
+        lengths = [len(n) for n in names]
+        rows.append({
+            "window_start": window, "client": client, "dns_requests": len(events),
+            "unique_qnames": len(set(names)),
+            "unique_base_domains": len({".".join(n.split(".")[-2:]) for n in names}),
+            "unique_subdomains": len({".".join(n.split(".")[:-2]) for n in names}),
+            "avg_qname_length": sum(lengths) / len(lengths), "max_qname_length": max(lengths),
+            "nxdomain_ratio": sum(e.get("rcode_name") == "NXDOMAIN" for e in events) / len(events),
+            "avg_label_entropy": sum(label_entropy(label) for label in labels) / len(labels),
+            "peak_requests_per_second": max(Counter(int(float(e["ts"])) for e in events).values()),
+        })
+    return pd.DataFrame(rows, columns=["window_start", "client", *DNS_WINDOW_FEATURES])

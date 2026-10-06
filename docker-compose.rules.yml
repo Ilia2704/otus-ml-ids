@@ -1,0 +1,17 @@
+# Optional finite lecture capture using the existing services. No monitoring expansion.
+services:
+  generator:
+    user: "0:0"
+    restart: "no"
+    command: ["python", "-c", "import time; time.sleep(86400)"]
+    ports: !reset []
+    volumes:
+      - ${RULE_RUN_DIR:?Set RULE_RUN_DIR}:/lecture
+  zeek:
+    restart: "no"
+    environment:
+      RULE_CAPTURE_READY: /lecture/raw/capture.ready
+    command: ["zeek", "-C", "-i", "eth0", "-w", "/lecture/raw/traffic.pcap", "/opt/ids/local.zeek"]
+    working_dir: /lecture/raw
+    volumes:
+      - ${RULE_RUN_DIR:?Set RULE_RUN_DIR}:/lecture
